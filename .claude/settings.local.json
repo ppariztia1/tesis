@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip3 install numpy pandas 2>&1)",
+      "Bash(cd \"/Users/pedropablo/Documents/Modelo Regret\" && python3 regret_gemini.py 2>&1)"
+    ]
+  }
+}
