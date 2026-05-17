@@ -168,3 +168,72 @@ for s in range(5):
     z = norm.ppf(taus[s])
     print(f"  g={taus[s]:>3}    {z:>6.2f}  ${p_star[s]:>10,.0f}  ${pi_star[s]:>13,.0f}")
 
+# ─────────────────────────────────────────────
+# 11. PROFIT REALIZADO
+#     Para cada regla g, evaluamos su p*(g)
+#     en CADA escenario s
+#     Pi_real[g][s] = D[s](p*(g)) * (p*(g) - costo)
+# ─────────────────────────────────────────────
+
+# Primero necesitamos el índice de p*(g) en la grilla P
+# (buscamos el precio más cercano en P a cada p* analítico)
+p_star_idx = []
+for s in range(5):
+    idx = np.argmin(np.abs(P - p_star[s]))
+    p_star_idx.append(idx)
+
+# Ahora calculamos el profit realizado
+Pi_real = np.zeros((5, 5))   # Pi_real[g][s]
+
+for g in range(5):            # para cada regla
+    for s in range(5):        # en cada escenario
+        d_realizada = D[s][p_star_idx[g]]          # demanda del escenario s al precio p*(g)
+        Pi_real[g][s] = d_realizada * (P[p_star_idx[g]] - costo)
+
+# ─────────────────────────────────────────────
+# 12. ORÁCULO
+#     Pi_best[s] = max sobre toda la grilla P
+#                  del profit en el escenario s
+# ─────────────────────────────────────────────
+
+Pi_best = np.zeros(5)         # un valor por escenario
+
+for s in range(5):
+    Pi_best[s] = np.max(Pi[s])    # Pi[s] ya lo calculamos antes
+
+# ─────────────────────────────────────────────
+# 13. REGRET
+#     R[g][s] = Pi_best[s] - Pi_real[g][s]
+# ─────────────────────────────────────────────
+
+R = np.zeros((5, 5))
+
+for g in range(5):
+    for s in range(5):
+        R[g][s] = Pi_best[s] - Pi_real[g][s]
+
+# Regret promedio por regla
+R_bar = R.mean(axis=1)        # axis=1 promedia sobre los escenarios
+
+# Regla ganadora
+g_star = np.argmin(R_bar)
+
+# ─────────────────────────────────────────────
+# 14. TABLA DE REGRET
+# ─────────────────────────────────────────────
+
+print("\n── Tabla de Regret R[g][s] ──")
+header = f"{'Regla g':>10}" + "".join(f"  s={s+1}(τ={taus[s]})  " for s in range(5)) + "  R̄_g"
+print(header)
+print("-" * 80)
+
+for g in range(5):
+    marca = " ← g*" if g == g_star else ""
+    fila = f"  g={taus[g]:>3} "
+    for s in range(5):
+        fila += f"  ${R[g][s]:>10,.0f}  "
+    fila += f"  ${R_bar[g]:>10,.0f}{marca}"
+    print(fila)
+
+print(f"\n→ Regla óptima: g* = {taus[g_star]}")
+print(f"→ Precio recomendado: p*(g*) = ${P[p_star_idx[g_star]]:,.0f} CLP")
