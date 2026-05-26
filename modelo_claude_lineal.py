@@ -14,17 +14,23 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm   # para Φ⁻¹(τ)
 
 # ─────────────────────────────────────────────
-# 1. PARÁMETROS  →  juega cambiando estos valores
+# 1. PARÁMETROS
+#    CAMBIO: sigma desaparece.
+#    Aparecen alpha_std y beta_std que representan
+#    la incertidumbre sobre cada parámetro.
 # ─────────────────────────────────────────────
 
-alpha = 200        # demanda base, para precio = 0
-beta  = 0.008      # sensibilidad al precio: por cada $1 CLP extra, se pierden β unidades
-sigma = 20         # ruido: qué tan dispersos son los escenarios entre sí
-costo = 3_000      # costo unitario en CLP
+alpha_hat = 200        # estimación puntual de α (demanda base)
+alpha_std = 20         # desv est. sobre α (± cuánto puede variar)
 
-p_min = 5_000      # precio mínimo de la grilla (CLP)
-p_max = 20_000     # precio máximo de la grilla (CLP)
-J     = 50         # cuántos precios distintos tiene la grilla
+beta_hat  = 0.008      # estimación puntual de β (sensibilidad al precio)
+beta_std  = 0.001      # desv est. sobre β
+
+costo     = 3_000      # costo unitario en CLP (fijo y conocido)
+
+p_min = 5_000
+p_max = 20_000
+J     = 50             # tamaño de la grilla de precios
 
 # ─────────────────────────────────────────────
 # 2. GRILLA DE PRECIOS  P = {p1, p2, ..., p50}
@@ -34,67 +40,48 @@ P = np.linspace(p_min, p_max, J)   # 50 precios igualmente espaciados
 
 # ─────────────────────────────────────────────
 # 3. QUINTILES  (5 escenarios + 5 reglas)
+# CAMBIOS: tenemos 1.000 escenarios.
+# Se muestran 1000 pares (α_k, β_k) con dist normal.
 # ─────────────────────────────────────────────
+S   = 1_000
+rng = np.random.default_rng(seed=42)   # seed para resultados reproducibles
 
-taus   = [0.1, 0.3, 0.5, 0.7, 0.9]
-labels = ["τ=0.1 (pesimista)", "τ=0.3", "τ=0.5 (mediana)", "τ=0.7", "τ=0.9 (optimista)"]
-colors = ["#f87171", "#fb923c", "#fbbf24", "#86efac", "#34d399"]
+alphas = rng.normal(alpha_hat, alpha_std, S)   # α_k ~ N(α̂, σ_α)
+betas  = rng.normal(beta_hat,  beta_std,  S)   # β_k ~ N(β̂, σ_β)
+betas  = np.clip(betas, 1e-6, None)            # β no puede ser negativo
 
 # ─────────────────────────────────────────────
 # 4. FUNCIÓN DE DEMANDA
 #    D(p, τ) = max(0,  α - β·p  +  σ·Φ⁻¹(τ))
 #    → una curva distinta por cada τ
 # ─────────────────────────────────────────────
-
-def demanda(p, tau):
-    z = norm.ppf(tau)           # Φ⁻¹(τ): z-score del cuantil
-    return np.maximum(0, alpha - beta * p + sigma * z)
-
-# Matriz de demanda: D[s][j] = demanda del escenario s al precio P[j]
-taus   = [0.1, 0.3, 0.5, 0.7, 0.9]
-D = np.array([demanda(P, tau) for tau in taus])   # shape (5, 50)
+D = np.maximum(0,
+               alphas[:, None]           # columna de α_k  → shape (S, 1)
+               - betas[:, None] * P[None, :])  # broadcast con P → shape (S, J)
 
 # ─────────────────────────────────────────────
 # 5. GRÁFICO DE CURVAS DE DEMANDA
+#    Graficamos 30 escenarios de muestra (graficar 1000 sería ilegible)
+#    y encima la curva de la estimación puntual (α̂, β̂).
 # ─────────────────────────────────────────────
-
 fig, ax = plt.subplots(figsize=(10, 6))
 
-for s in range(5):
-    ax.plot(P, D[s], linewidth=2, label=labels[s])
+for k in range(30):
+    ax.plot(P, D[k], linewidth=0.8, alpha=0.4, color="#60a5fa")
 
-ax.set_xlabel("Precio (CLP)", fontsize=11)
-ax.set_ylabel("Demanda (unidades)", fontsize=11)
-ax.set_title("Curvas de demanda por quintil\n"
-             r"$D(p,\tau) = \max(0,\ \alpha - \beta p + \sigma \cdot \Phi^{-1}(\tau))$",
-             fontsize=13, pad=14)
+D_hat = np.maximum(0, alpha_hat - beta_hat * P)   # curva con valores estimados
+ax.plot(P, D_hat, linewidth=2.5, color="white",
+        label=r"$D(p;\hat{\alpha},\hat{\beta})$ — estimación puntual")
 
-ax.legend(loc="upper right", fontsize=9)
+ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Demanda (unidades)")
+ax.set_title("Muestra de curvas de demanda (30 de 1000 escenarios)\n"
+             r"$D(p;\alpha_k,\beta_k)=\max(0,\alpha_k-\beta_k\,p)$", pad=14)
+ax.legend(); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-ax.grid(linewidth=0.5, linestyle="--", alpha=0.5)
-
 plt.tight_layout()
 plt.savefig("curvas_demanda.png", dpi=150, bbox_inches="tight")
 plt.show()
-print("Gráfico guardado en curvas_demanda.png")
-
-# ─────────────────────────────────────────────
-# 6. IMPRIME TABLA DE DEMANDA (opcional)
-#    para ver los números crudos
-# ─────────────────────────────────────────────
-
-print("\n── Demanda en precios seleccionados ──")
-check_prices = [5_000, 8_000, 10_000, 13_000, 16_000, 20_000]
-header = f"{'Precio':>10}" + "".join(f"  {t:>8}" for t in taus)
-print(header)
-print("-" * (10 + 10 * 5))
-for p in check_prices:
-    row = f"${p:>9,.0f}"
-    for tau in taus:
-        d = max(0, alpha - beta * p + sigma * norm.ppf(tau))
-        row += f"  {d:>8.1f}"
-    print(row)
-
+print("Gráfico guardado: curvas_demanda.png")
 
 # ─────────────────────────────────────────────
 # 7. PROFIT
@@ -102,138 +89,127 @@ for p in check_prices:
 # ─────────────────────────────────────────────
 
 # Matriz de profit: Pi[s][j] = profit del escenario s al precio P[j]
-Pi = np.array([D[s] * (P - costo) for s in range(5)])   # shape (5, 50)
+Pi = D * (P[None, :] - costo)    # shape (S, J)
 
 # ─────────────────────────────────────────────
-# 8. PRECIO ÓPTIMO ANALÍTICO
-#    p* = (α + β·c + σ·z) / (2β)
+# 8. PRECIO ÓPTIMO
+#    NUEVO: ya no solo calculamos p* por escenario.
+#    Calculamos el profit ESPERADO E[Π(p)] promediando sobre todos los escenarios,
+#    y encontramos el precio que lo maximiza.
+#
+#    E[Π(P[j])] = (1/S) · Σ_k Π[k, j]
+#    p_EV = argmax_j E[Π(P[j])]
 # ─────────────────────────────────────────────
+E_Pi     = Pi.mean(axis=0)        # promedio sobre escenarios → shape (J,)
+p_EV_idx = np.argmax(E_Pi)
+p_EV     = P[p_EV_idx]
 
-p_star = []
-for tau in taus:
-    z = norm.ppf(tau)
-    p_opt = (alpha + beta * costo + sigma * z) / (2 * beta)
-    p_star.append(p_opt)
-
-# profit en cada p* (enchufamos p* en la fórmula de profit)
-pi_star = []
-for s in range(5):
-    z     = norm.ppf(taus[s])
-    d_opt = max(0, alpha - beta * p_star[s] + sigma * z)
-    pi_star.append(d_opt * (p_star[s] - costo))
+print(f"\n→ Precio que maximiza el profit esperado:  p_EV = ${p_EV:,.0f} CLP")
+print(f"  Profit esperado en p_EV = ${E_Pi[p_EV_idx]:,.0f}")
 
 # ─────────────────────────────────────────────
 # 9. GRÁFICO DE PROFIT CON p* MARCADO
+#    Mostramos escenarios de fondo + curva del valor esperado.
 # ─────────────────────────────────────────────
-
 fig, ax = plt.subplots(figsize=(10, 6))
 
-for s in range(5):
-    ax.plot(P, Pi[s], linewidth=2, label=labels[s])
+for k in range(30):
+    ax.plot(P, Pi[k], linewidth=0.8, alpha=0.3, color="#86efac")
 
-# Marcar el p* de cada escenario con un punto
-for s in range(5):
-    ax.plot(p_star[s], pi_star[s], marker="o", markersize=8, color="black")
-    ax.annotate(f"p*={p_star[s]:,.0f}",
-                xy=(p_star[s], pi_star[s]),
-                xytext=(0, 10), textcoords="offset points",
-                fontsize=8, ha="center")
+ax.plot(P, E_Pi, linewidth=2.5, color="white",
+        label=r"$\mathbb{E}[\Pi(p)]$ — profit esperado")
+ax.axvline(p_EV,  color="gold",  linestyle="--", linewidth=1.5,
+           label=f"p_EV  = ${p_EV:,.0f}")
+ax.axvline(costo, color="gray",  linestyle=":",  linewidth=1,
+           label=f"costo = ${costo:,}")
 
-ax.axvline(x=costo, color="gray", linestyle=":", linewidth=1, label=f"costo = ${costo:,}")
-
-ax.set_xlabel("Precio (CLP)", fontsize=11)
-ax.set_ylabel("Profit (CLP)", fontsize=11)
-ax.set_title("Curvas de profit por quintil\n"
-             r"$\Pi(p,\tau) = D(p,\tau) \cdot (p - c)$",
-             fontsize=13, pad=14)
-
-ax.legend(loc="upper left", fontsize=9)
+ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Profit (CLP)")
+ax.set_title("Curvas de profit por escenario\n"
+             r"$\Pi(p;\alpha_k,\beta_k)=D(p;\alpha_k,\beta_k)\cdot(p-c)$", pad=14)
+ax.legend(loc="upper left")
+ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-ax.grid(linewidth=0.5, linestyle="--", alpha=0.5)
-
 plt.tight_layout()
 plt.savefig("curvas_profit.png", dpi=150, bbox_inches="tight")
 plt.show()
-print("Gráfico guardado en curvas_profit.png")
+print("Gráfico guardado: curvas_profit.png")
 
 # ─────────────────────────────────────────────
-# 10. IMPRIME TABLA DE p* Y PROFIT ÓPTIMO
+# 10. ORÁCULO
+#     CAMBIO IMPORTANTE: antes el oráculo era el máximo de cada escenario
+#     evaluado en su propio precio óptimo → la diagonal era trivialmente cero
+#     y el ganador siempre era el escenario del medio.
+#
+#     Ahora separamos dos cosas:
+#       (a) (α_oracle, β_oracle): el "valor verdadero" del mundo, cercano
+#           pero NO igual a (α̂, β̂). Representa que nunca estimamos exacto.
+#       (b) Pi_best[k]: el mejor profit posible EN el escenario k,
+#           mirando toda la grilla → es el benchmark retrospectivo del regret.
 # ─────────────────────────────────────────────
 
-print("\n── Precio óptimo por regla g ──")
-print(f"{'Regla g':>10}  {'z':>6}  {'p*':>12}  {'Profit en p*':>15}")
-print("-" * 50)
-for s in range(5):
-    z = norm.ppf(taus[s])
-    print(f"  g={taus[s]:>3}    {z:>6.2f}  ${p_star[s]:>10,.0f}  ${pi_star[s]:>13,.0f}")
+alpha_oracle = alpha_hat + 0.3 * alpha_std   # ligeramente distinto de α̂
+beta_oracle  = beta_hat  + 0.3 * beta_std    # ligeramente distinto de β̂
+
+print(f"\n── Oráculo (parámetros 'verdaderos') ──")
+print(f"  α_oracle = {alpha_oracle:.2f}  (vs α̂ = {alpha_hat})")
+print(f"  β_oracle = {beta_oracle:.5f} (vs β̂ = {beta_hat})")
+
+# Mejor profit posible en cada escenario (máximo sobre toda la grilla de precios)
+Pi_best = Pi.max(axis=1)    # shape (S,)
 
 # ─────────────────────────────────────────────
 # 11. PROFIT REALIZADO
-#     Para cada regla g, evaluamos su p*(g)
-#     en CADA escenario s
-#     Pi_real[g][s] = D[s](p*(g)) * (p*(g) - costo)
+#     Para cada precio P[j] como "regla g", su profit en cada escenario k
+#     ya está calculado: es simplemente Pi[k, j].
+#     Transponemos para tener shape (J, S): Pi_real[j, k].
 # ─────────────────────────────────────────────
 
-# Primero necesitamos el índice de p*(g) en la grilla P
-# (buscamos el precio más cercano en P a cada p* analítico)
-p_star_idx = []
-for s in range(5):
-    idx = np.argmin(np.abs(P - p_star[s]))
-    p_star_idx.append(idx)
-
-# Ahora calculamos el profit realizado
-Pi_real = np.zeros((5, 5))   # Pi_real[g][s]
-
-for g in range(5):            # para cada regla
-    for s in range(5):        # en cada escenario
-        d_realizada = D[s][p_star_idx[g]]          # demanda del escenario s al precio p*(g)
-        Pi_real[g][s] = d_realizada * (P[p_star_idx[g]] - costo)
+Pi_real = Pi.T    # shape (J, S):  Pi_real[j, k] = profit de la regla j en escenario k
 
 # ─────────────────────────────────────────────
-# 12. ORÁCULO
-#     Pi_best[s] = max sobre toda la grilla P
-#                  del profit en el escenario s
+# 12. REGRET
+#     R[j, k] = Pi_best[k] - Pi_real[j, k]
+#       → cuánto dejaste de ganar en el escenario k al fijar el precio P[j]
+#
+#     R_bar[j] = promedio de R[j, k] sobre k
+#       → regret esperado del precio P[j]
+#
+#     g* = argmin_j R_bar[j]  → precio que minimiza el regret esperado
 # ─────────────────────────────────────────────
 
-Pi_best = np.zeros(5)         # un valor por escenario
+R     = Pi_best[None, :] - Pi_real   # shape (J, S)
+R_bar = R.mean(axis=1)               # shape (J,)
 
-for s in range(5):
-    Pi_best[s] = np.max(Pi[s])    # Pi[s] ya lo calculamos antes
+g_star_idx = np.argmin(R_bar)
+p_g_star   = P[g_star_idx]
 
-# ─────────────────────────────────────────────
-# 13. REGRET
-#     R[g][s] = Pi_best[s] - Pi_real[g][s]
-# ─────────────────────────────────────────────
-
-R = np.zeros((5, 5))
-
-for g in range(5):
-    for s in range(5):
-        R[g][s] = Pi_best[s] - Pi_real[g][s]
-
-# Regret promedio por regla
-R_bar = R.mean(axis=1)        # axis=1 promedia sobre los escenarios
-
-# Regla ganadora
-g_star = np.argmin(R_bar)
+print(f"\n→ Precio que minimiza el regret esperado:  p*(g*) = ${p_g_star:,.0f} CLP")
+print(f"  Regret esperado mínimo = ${R_bar[g_star_idx]:,.0f}")
 
 # ─────────────────────────────────────────────
-# 14. TABLA DE REGRET
+# 13. GRÁFICO DE REGRET ESPERADO
+#     NUEVO: visualiza la curva E[R(p)] sobre toda la grilla.
+#     El mínimo es la regla óptima g*.
 # ─────────────────────────────────────────────
 
-print("\n── Tabla de Regret R[g][s] ──")
-header = f"{'Regla g':>10}" + "".join(f"  s={s+1}(τ={taus[s]})  " for s in range(5)) + "  R̄_g"
-print(header)
-print("-" * 80)
+fig, ax = plt.subplots(figsize=(10, 5))
 
-for g in range(5):
-    marca = " ← g*" if g == g_star else ""
-    fila = f"  g={taus[g]:>3} "
-    for s in range(5):
-        fila += f"  ${R[g][s]:>10,.0f}  "
-    fila += f"  ${R_bar[g]:>10,.0f}{marca}"
-    print(fila)
+ax.plot(P, R_bar, linewidth=2, color="#f87171",
+        label=r"$\bar{R}(p)$ — regret esperado")
+ax.axvline(p_g_star, color="gold",  linestyle="--", linewidth=1.5,
+           label=f"p*(g*) = ${p_g_star:,.0f}  ← regla óptima")
+ax.axvline(p_EV,     color="cyan",  linestyle=":",  linewidth=1.5,
+           label=f"p_EV   = ${p_EV:,.0f}  ← max profit esperado")
 
-print(f"\n→ Regla óptima: g* = {taus[g_star]}")
-print(f"→ Precio recomendado: p*(g*) = ${P[p_star_idx[g_star]]:,.0f} CLP")
+ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Regret esperado (CLP)")
+ax.set_title("Regret esperado por precio\n"
+             r"$\bar{R}(p)=\frac{1}{S}\sum_k\left[\Pi_k^*-\Pi(p;\alpha_k,\beta_k)\right]$",
+             pad=14)
+ax.legend(); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
+ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+plt.tight_layout()
+plt.savefig("regret_esperado.png", dpi=150, bbox_inches="tight")
+plt.show()
+print("Gráfico guardado: regret_esperado.png")
