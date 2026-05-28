@@ -3,10 +3,8 @@ Regret-Grid: Ejemplo Acrílico
 ==============================
 Modelo: D(p, τ) = max(0, α - β·p + σ·Φ⁻¹(τ))
 
-Φ⁻¹(τ) = inversa de la normal estándar (viene de scipy)
+Φ⁻¹(τ) = inversa de la normal estándar
 En la tesis real, este bloque lo reemplaza la red neuronal.
-
-Precios en CLP.
 """
 
 import numpy as np
@@ -66,15 +64,15 @@ D = np.maximum(0,
 # ─────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 6))
 
-for k in range(30):
+for k in range(50):
     ax.plot(P, D[k], linewidth=0.8, alpha=0.4, color="#60a5fa")
 
 D_hat = np.maximum(0, alpha_hat - beta_hat * P)   # curva con valores estimados
-ax.plot(P, D_hat, linewidth=2.5, color="white",
+ax.plot(P, D_hat, linewidth=2.5, color="#ffde5b",
         label=r"$D(p;\hat{\alpha},\hat{\beta})$ — estimación puntual")
 
 ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Demanda (unidades)")
-ax.set_title("Muestra de curvas de demanda (30 de 1000 escenarios)\n"
+ax.set_title("Muestra de curvas de demanda (50 de 1000 escenarios)\n"
              r"$D(p;\alpha_k,\beta_k)=\max(0,\alpha_k-\beta_k\,p)$", pad=14)
 ax.legend(); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
@@ -113,10 +111,10 @@ print(f"  Profit esperado en p_EV = ${E_Pi[p_EV_idx]:,.0f}")
 # ─────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 6))
 
-for k in range(30):
-    ax.plot(P, Pi[k], linewidth=0.8, alpha=0.3, color="#86efac")
+for k in range(50):
+    ax.plot(P, Pi[k], linewidth=0.8, alpha=0.3, color="#4a9b68")
 
-ax.plot(P, E_Pi, linewidth=2.5, color="white",
+ax.plot(P, E_Pi, linewidth=2.5, color="#427de3",
         label=r"$\mathbb{E}[\Pi(p)]$ — profit esperado")
 ax.axvline(p_EV,  color="gold",  linestyle="--", linewidth=1.5,
            label=f"p_EV  = ${p_EV:,.0f}")
