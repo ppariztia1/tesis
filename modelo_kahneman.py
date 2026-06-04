@@ -1,86 +1,74 @@
 """
-Regret-Grid: Ejemplo Acrílico  ·  versión con AVERSIÓN A LA PÉRDIDA (Kahneman)
-==============================================================================
-Modelo base:   D(p) = max(0, α - β·p)
-Modelo nuevo:  D(p) = max(0, α - β·p + γ·v(p; R, λ))
+Regret-Grid: Ejemplo Acrílico  ·  con AVERSIÓN A LA PÉRDIDA (Kahneman)
+=====================================================================
+Demanda nueva:  D(p) = max(0, α + α_p·( [r-p]⁺ - λ·[p-r]⁺ ))
+con la utilidad transaccional de la ecuación (1):
 
-donde v(p; R, λ) es la función de valor de Kahneman respecto a un
-precio de referencia R:
+    u(r, p) = α_p·[r - p]⁺ - λ·α_p·[p - r]⁺
+    · β⁺ = α_p     (pendiente cuando p < r, zona de ganancia)
+    · β⁻ = λ·α_p   (pendiente cuando p > r, zona de pérdida)
 
-    v(p) = max(0, R - p)  -  λ · max(0, p - R)
+INCERTIDUMBRE: vive en α (nivel) Y en α_p (pendiente/sensibilidad).
+   → La incertidumbre en α_p es la que, junto al criterio de PEOR CASO,
+     hace divergir el precio del óptimo de valor esperado.
+   → Si pones alpha_p_std = 0, recuperas la versión donde todo coincide.
 
-    · si p < R  → el cliente lo percibe como GANANCIA (cuenta 1×)
-    · si p > R  → lo percibe como PÉRDIDA   (cuenta λ×, con λ = 2.25)
-
-La asimetría (λ > 1) es lo que hace que el precio que maximiza el profit
-esperado (p_EV) y el que minimiza el regret esperado (p_g*) dejen de coincidir.
+DOS criterios de decisión:
+    · regret ESPERADO  → p_g*       (coincide con p_EV por construcción)
+    · regret PEOR CASO → p_g_worst  (diverge: acá se ve el efecto)
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import norm   # para Φ⁻¹(τ)
+from scipy.stats import norm
 
 # ─────────────────────────────────────────────
 # 1. PARÁMETROS
 # ─────────────────────────────────────────────
-
 alpha_hat = 200        # estimación puntual de α (demanda base)
-alpha_std = 20         # desv est. sobre α (± cuánto puede variar)
+alpha_std = 20         # desv est. sobre α
 
-beta_hat  = 0.008      # estimación puntual de β (sensibilidad al precio)
-beta_std  = 0.001      # desv est. sobre β
-
-costo     = 3_000      # costo unitario en CLP (fijo y conocido)
+costo     = 3_000      # costo unitario en CLP
 
 p_min = 5_000
 p_max = 20_000
-J     = 50             # tamaño de la grilla de precios
+J     = 50
 
-# ─── ★ NUEVO: parámetros de Kahneman (aversión a la pérdida) ───
-lam   = 2.25           # λ: cuánto más pesa una "pérdida" que una "ganancia"
-R_ref = 12_000         # precio de referencia (lo que el cliente "espera" pagar)
-gamma = 0.005          # γ: escala que conecta el valor percibido con la demanda
-#                        ↑ ESTE es el parámetro a calibrar ("alfa precio")
-
-# ─────────────────────────────────────────────
-# 2. GRILLA DE PRECIOS  P = {p1, p2, ..., p50}
-# ─────────────────────────────────────────────
-
-P = np.linspace(p_min, p_max, J)   # 50 precios equiespaciados
+# ─── Parámetros de Kahneman ───
+alpha_p_hat = 0.008    # α_p: sensibilidad marginal al precio (β⁺). El único que se estima.
+alpha_p_std = 0.003    # incertidumbre sobre α_p  (pon 0 para que todo coincida)
+lam         = 2.25     # λ: coeficiente de aversión a la pérdida (calibrado)
+r_ref       = 12_000   # r: precio de referencia del cliente
 
 # ─────────────────────────────────────────────
-# 3. ESCENARIOS  (1000 pares α_k, β_k)
+# 2. GRILLA DE PRECIOS
+# ─────────────────────────────────────────────
+P = np.linspace(p_min, p_max, J)
+
+# ─────────────────────────────────────────────
+# 3. ESCENARIOS (1000 pares α_k, α_p_k)
 # ─────────────────────────────────────────────
 S   = 1_000
-rng = np.random.default_rng(seed=42)   # seed para resultados reproducibles
+rng = np.random.default_rng(seed=42)
 
-alphas = rng.normal(alpha_hat, alpha_std, S)   # α_k ~ N(α̂, σ_α)
-betas  = rng.normal(beta_hat,  beta_std,  S)   # β_k ~ N(β̂, σ_β)
-betas  = np.clip(betas, 1e-6, None)            # β no puede ser negativo
+alphas   = rng.normal(alpha_hat,   alpha_std,   S)            # α_k   ~ N(α̂, σ_α)
+alpha_ps = rng.normal(alpha_p_hat, alpha_p_std, S)            # α_p,k ~ N(α̂_p, σ_αp)
+alpha_ps = np.clip(alpha_ps, 1e-6, None)                      # α_p no puede ser negativo
 
 # ─────────────────────────────────────────────
-# ★ NUEVO: FUNCIÓN DE VALOR DE KAHNEMAN
-#   Vectorizada: p puede ser un escalar o un array (broadcasting).
-#   Devuelve un valor que se SUMA a la demanda:
-#     · positivo cuando el precio está bajo la referencia
-#     · negativo (y amplificado por λ) cuando está sobre la referencia
+#    FORMA DE REFERENCIA (la parte sin α_p)
+#    v(p) = [r - p]⁺ - λ·[p - r]⁺
 # ─────────────────────────────────────────────
-def valor_kahneman(p, R, lam):
-    ganancia = np.maximum(0, R - p)    # precio bajo R → ganancia percibida
-    perdida  = np.maximum(0, p - R)    # precio sobre R → pérdida percibida
-    return ganancia - lam * perdida    # la pérdida pesa lam veces más
+def valor_referencia(p, r, lam):
+    return np.maximum(0, r - p) - lam * np.maximum(0, p - r)
+
+V = valor_referencia(P[None, :], r_ref, lam)                  # shape (1, J)
 
 # ─────────────────────────────────────────────
 # 4. FUNCIÓN DE DEMANDA
-#    ANTES:  D = max(0, α_k - β_k·p)
-#    AHORA:  D = max(0, α_k - β_k·p + γ·v(p; R, λ))   ★
-#    El término de Kahneman es común a todos los escenarios:
-#    depende solo del precio (es un rasgo del consumidor, no del escenario).
+#    D = max(0, α_k + α_p,k · v(p))    ← sale el -β·p, entra Kahneman
 # ─────────────────────────────────────────────
-D = np.maximum(0,
-               alphas[:, None]                       # α_k → shape (S, 1)
-               - betas[:, None] * P[None, :]         # β_k·p → broadcast (S, J)
-               + gamma * valor_kahneman(P[None, :], R_ref, lam))  # ★ término nuevo
+D = np.maximum(0, alphas[:, None] + alpha_ps[:, None] * V)    # shape (S, J)
 
 # ─────────────────────────────────────────────
 # 5. GRÁFICO DE CURVAS DE DEMANDA
@@ -90,19 +78,15 @@ fig, ax = plt.subplots(figsize=(10, 6))
 for k in range(50):
     ax.plot(P, D[k], linewidth=0.8, alpha=0.4, color="#60a5fa")
 
-# ★ la curva puntual también incluye ahora el término de Kahneman
-D_hat = np.maximum(0, alpha_hat - beta_hat * P
-                   + gamma * valor_kahneman(P, R_ref, lam))
+D_hat = np.maximum(0, alpha_hat + alpha_p_hat * valor_referencia(P, r_ref, lam))
 ax.plot(P, D_hat, linewidth=2.5, color="#ffde5b",
-        label=r"$D(p;\hat{\alpha},\hat{\beta})$ — estimación puntual")
-
-# ★ marcamos el precio de referencia R
-ax.axvline(R_ref, color="#a78bfa", linestyle="--", linewidth=1.5,
-           label=f"R = ${R_ref:,.0f}  ← precio de referencia")
+        label=r"$D(p;\hat{\alpha},\hat{\alpha}_p)$ — estimación puntual")
+ax.axvline(r_ref, color="#a78bfa", linestyle="--", linewidth=1.5,
+           label=f"r = ${r_ref:,.0f}  ← precio de referencia")
 
 ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Demanda (unidades)")
 ax.set_title("Curvas de demanda con aversión a la pérdida (50 de 1000 escenarios)\n"
-             r"$D(p)=\max(0,\alpha-\beta p+\gamma\,v(p;R,\lambda))$", pad=14)
+             r"$D(p)=\max(0,\ \alpha + \alpha_p([r-p]^+ - \lambda[p-r]^+))$", pad=14)
 ax.legend(); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 plt.tight_layout()
@@ -111,15 +95,14 @@ plt.show()
 print("Gráfico guardado: curvas_demanda.png")
 
 # ─────────────────────────────────────────────
-# 7. PROFIT
-#    Π(p) = D(p) · (p - costo)   ← sin cambios: la asimetría ya entró por D
+# 7. PROFIT   Π(p) = D(p) · (p - costo)
 # ─────────────────────────────────────────────
 Pi = D * (P[None, :] - costo)    # shape (S, J)
 
 # ─────────────────────────────────────────────
-# 8. PRECIO ÓPTIMO  (max profit esperado)
+# 8. PRECIO QUE MAXIMIZA EL PROFIT ESPERADO
 # ─────────────────────────────────────────────
-E_Pi     = Pi.mean(axis=0)        # promedio sobre escenarios → shape (J,)
+E_Pi     = Pi.mean(axis=0)
 p_EV_idx = np.argmax(E_Pi)
 p_EV     = P[p_EV_idx]
 
@@ -127,7 +110,7 @@ print(f"\n→ Precio que maximiza el profit esperado:  p_EV = ${p_EV:,.0f} CLP")
 print(f"  Profit esperado en p_EV = ${E_Pi[p_EV_idx]:,.0f}")
 
 # ─────────────────────────────────────────────
-# 9. GRÁFICO DE PROFIT CON p* MARCADO
+# 9. GRÁFICO DE PROFIT
 # ─────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -136,17 +119,13 @@ for k in range(50):
 
 ax.plot(P, E_Pi, linewidth=2.5, color="#427de3",
         label=r"$\mathbb{E}[\Pi(p)]$ — profit esperado")
-ax.axvline(p_EV,  color="gold",  linestyle="--", linewidth=1.5,
-           label=f"p_EV  = ${p_EV:,.0f}")
-ax.axvline(R_ref, color="#a78bfa", linestyle="--", linewidth=1,    # ★ referencia
-           label=f"R = ${R_ref:,.0f}")
-ax.axvline(costo, color="gray",  linestyle=":",  linewidth=1,
-           label=f"costo = ${costo:,}")
+ax.axvline(p_EV,  color="gold",    linestyle="--", linewidth=1.5, label=f"p_EV = ${p_EV:,.0f}")
+ax.axvline(r_ref, color="#a78bfa", linestyle="--", linewidth=1,   label=f"r = ${r_ref:,.0f}")
+ax.axvline(costo, color="gray",    linestyle=":",  linewidth=1,   label=f"costo = ${costo:,}")
 
 ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Profit (CLP)")
 ax.set_title("Curvas de profit por escenario (con aversión a la pérdida)", pad=14)
-ax.legend(loc="upper left")
-ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
+ax.legend(loc="upper left"); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 plt.tight_layout()
@@ -155,57 +134,52 @@ plt.show()
 print("Gráfico guardado: curvas_profit.png")
 
 # ─────────────────────────────────────────────
-# 10. ORÁCULO
-#     (sin cambios respecto a tu versión: el oráculo y el benchmark
-#      retrospectivo son independientes de la forma de la demanda)
+# 10. ORÁCULO / BENCHMARK RETROSPECTIVO
+#     Pi_best[k] = mejor profit posible EN el escenario k (toda la grilla)
 # ─────────────────────────────────────────────
-alpha_oracle = alpha_hat + 0.3 * alpha_std   # ligeramente distinto de α̂
-beta_oracle  = beta_hat  + 0.3 * beta_std    # ligeramente distinto de β̂
-
-print(f"\n── Oráculo (parámetros 'verdaderos') ──")
-print(f"  α_oracle = {alpha_oracle:.2f}  (vs α̂ = {alpha_hat})")
-print(f"  β_oracle = {beta_oracle:.5f} (vs β̂ = {beta_hat})")
-
-# Mejor profit posible en cada escenario (máximo sobre toda la grilla de precios)
 Pi_best = Pi.max(axis=1)    # shape (S,)
 
 # ─────────────────────────────────────────────
-# 11. PROFIT REALIZADO
+# 11. PROFIT REALIZADO  →  Pi_real[j, k]
 # ─────────────────────────────────────────────
-Pi_real = Pi.T    # shape (J, S):  Pi_real[j, k] = profit de la regla j en escenario k
+Pi_real = Pi.T    # shape (J, S)
 
 # ─────────────────────────────────────────────
-# 12. REGRET
+# 12. REGRET  —  DOS CRITERIOS
+#     R[j, k] = Pi_best[k] - Pi_real[j, k]
+#     (a) ESPERADO : R_bar[j] = promedio sobre k → p_g*  (= p_EV por construcción)
+#     (b) PEOR CASO: R_max[j] = máximo sobre k   → p_g_worst (diverge)
 # ─────────────────────────────────────────────
-R     = Pi_best[None, :] - Pi_real   # shape (J, S)
-R_bar = R.mean(axis=1)               # shape (J,)
+R = Pi_best[None, :] - Pi_real        # shape (J, S)
 
-g_star_idx = np.argmin(R_bar)
-p_g_star   = P[g_star_idx]
+R_bar = R.mean(axis=1)
+p_g_star = P[np.argmin(R_bar)]
 
-print(f"\n→ Precio que minimiza el regret esperado:  p*(g*) = ${p_g_star:,.0f} CLP")
-print(f"  Regret esperado mínimo = ${R_bar[g_star_idx]:,.0f}")
+R_max = R.max(axis=1)
+p_g_worst = P[np.argmin(R_max)]
 
-# ─── ★ NUEVO: comparación directa de los dos criterios ───
+print(f"\n→ Regret ESPERADO  → p_g*      = ${p_g_star:,.0f} CLP  (mín = ${R_bar[np.argmin(R_bar)]:,.0f})")
+print(f"→ Regret PEOR CASO → p_g_worst = ${p_g_worst:,.0f} CLP  (mín-máx = ${R_max[np.argmin(R_max)]:,.0f})")
+
 print(f"\n── Comparación de criterios ──")
-print(f"  p_EV  (max profit esperado)  = ${p_EV:,.0f}")
-print(f"  p_g*  (min regret esperado)  = ${p_g_star:,.0f}")
-print(f"  Diferencia                   = ${abs(p_EV - p_g_star):,.0f}")
+print(f"  p_EV       (max profit esperado)   = ${p_EV:,.0f}")
+print(f"  p_g*       (min regret esperado)   = ${p_g_star:,.0f}   diff vs p_EV = ${abs(p_EV-p_g_star):,.0f}")
+print(f"  p_g_worst  (min regret peor caso)  = ${p_g_worst:,.0f}   diff vs p_EV = ${abs(p_EV-p_g_worst):,.0f}")
 
 # ─────────────────────────────────────────────
-# 13. GRÁFICO DE REGRET ESPERADO
+# 13. GRÁFICO DE REGRET (esperado vs peor caso)
 # ─────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 5))
 
-ax.plot(P, R_bar, linewidth=2, color="#f87171",
-        label=r"$\bar{R}(p)$ — regret esperado")
-ax.axvline(p_g_star, color="gold",  linestyle="--", linewidth=1.5,
-           label=f"p*(g*) = ${p_g_star:,.0f}  ← regla óptima")
-ax.axvline(p_EV,     color="cyan",  linestyle=":",  linewidth=1.5,
-           label=f"p_EV   = ${p_EV:,.0f}  ← max profit esperado")
+ax.plot(P, R_bar, linewidth=2, color="#f87171", label=r"$\bar{R}(p)$ — regret esperado")
+ax.plot(P, R_max, linewidth=2, color="#b45309", linestyle="-.",
+        label=r"$\max_k R(p)$ — regret peor caso")
+ax.axvline(p_g_star,  color="gold",    linestyle="--", linewidth=1.5, label=f"p_g* = ${p_g_star:,.0f}")
+ax.axvline(p_g_worst, color="#b45309", linestyle="--", linewidth=1.5, label=f"p_g_worst = ${p_g_worst:,.0f}")
+ax.axvline(p_EV,      color="cyan",    linestyle=":",  linewidth=1.5, label=f"p_EV = ${p_EV:,.0f}")
 
-ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Regret esperado (CLP)")
-ax.set_title("Regret esperado por precio (con aversión a la pérdida)", pad=14)
+ax.set_xlabel("Precio (CLP)"); ax.set_ylabel("Regret (CLP)")
+ax.set_title("Regret por precio: esperado vs peor caso", pad=14)
 ax.legend(); ax.grid(linewidth=0.4, linestyle="--", alpha=0.4)
 ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
 ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
