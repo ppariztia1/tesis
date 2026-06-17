@@ -13,9 +13,10 @@ from scipy.stats import norm   # para Φ⁻¹(τ)
 
 # ─────────────────────────────────────────────
 # 1. PARÁMETROS
-#    CAMBIO: sigma integrado en alpha y beta:
-#       Aparece alpha/beta_std que representan
-#       la desv. est. sobre cada parámetro.
+#    CAMBIO:
+#    + alpha_p: sensibilidad marginal al precio
+#    + lamb: lambda 2,25
+#    + r_ref: regra del precio de referencia.
 # ─────────────────────────────────────────────
 
 alpha_hat = 200        # estimación puntual de α (demanda base)
@@ -29,6 +30,10 @@ costo     = 3_000      # costo unitario en CLP (fijo y conocido)
 p_min = 5_000
 p_max = 20_000
 J     = 50             # tamaño de la grilla de precios
+
+# alpha_p = 0.008
+# lam = 2.25
+# r_ref   = 12_000
 
 # ─────────────────────────────────────────────
 # 2. GRILLA DE PRECIOS  P = {p1, p2, ..., p50}

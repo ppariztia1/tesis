@@ -37,8 +37,8 @@ J     = 50
 # ─── Parámetros de Kahneman ───
 alpha_p_hat = 0.008    # α_p: sensibilidad marginal al precio (β⁺). El único que se estima.
 alpha_p_std = 0.003    # incertidumbre sobre α_p  (pon 0 para que todo coincida)
-lam         = 2.25     # λ: coeficiente de aversión a la pérdida (calibrado)
-r_ref       = 12_000   # r: precio de referencia del cliente
+lam = 2.25             # λ: coeficiente de aversión a la pérdida.
+r_ref = 12_000         # r: precio de referencia del cliente
 
 # ─────────────────────────────────────────────
 # 2. GRILLA DE PRECIOS
