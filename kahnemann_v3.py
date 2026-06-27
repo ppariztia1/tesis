@@ -225,8 +225,27 @@ ax.set(title="1 · Demanda con aversión a la pérdida  (50 de 1.000 escenarios)
 ax.legend(); ax.grid(ls="--", lw=0.4, alpha=0.4); ax.xaxis.set_major_formatter(clp)
 fig1.tight_layout()
 
-# ── GRÁFICO 2 · Regret por precio (con marco de riesgo mejor–peor caso) ──────
-fig2, ax = plt.subplots(figsize=(10, 5.5))
+# ── GRÁFICO 2 · Profit por precio ───────────────────────────────────────────
+#   Mismo espíritu que el Gráfico 1, pero del profit. Sirve para VER la identidad
+#   [D6]: la vertical en p_g* cae exactamente sobre el máximo del profit esperado
+#   (promedio de escenarios) → minimizar regret esperado ≡ maximizar profit esperado.
+fig2, ax = plt.subplots(figsize=(10, 6))
+for k in range(50):                                    # 50 de los 1.000 escenarios
+    ax.plot(precios, profit[k], lw=0.8, alpha=0.4, color="#fca5a5")
+ax.plot(precios, profit.mean(axis=0), lw=2.6, color="#b91c1c",
+        label="profit esperado (promedio de escenarios)")
+ax.axvline(p_regret_esperado, color="gold", ls="--", lw=1.6,
+           label=f"p_g* = ${p_regret_esperado:,.0f}  (máx profit esperado = p_EV)")
+ax.axvline(r_ref, color="#a78bfa", ls="--", lw=1.2,
+           label=f"precio de referencia  r = ${r_ref:,.0f}")
+ax.set(title="2 · Profit por precio  (50 de 1.000 escenarios)",
+       xlabel="Precio (CLP)", ylabel="Profit (CLP)")
+ax.legend(fontsize=9); ax.grid(ls="--", lw=0.4, alpha=0.4)
+ax.xaxis.set_major_formatter(clp); ax.yaxis.set_major_formatter(clp)
+fig2.tight_layout()
+
+# ── GRÁFICO 3 · Regret por precio (con marco de riesgo mejor–peor caso) ──────
+fig3, ax = plt.subplots(figsize=(10, 5.5))
 ax.fill_between(precios, regret_mejor, regret_peor, color="#fb923c", alpha=0.13,
                 label="rango mejor–peor caso (marco de riesgo)")
 ax.plot(precios, regret_peor,  lw=1.8, color="#fb923c",            label="peor caso  (minimax)")
@@ -237,15 +256,15 @@ ax.axvline(p_regret_esperado, color="gold",    ls="--", lw=1.6,
 ax.axvline(p_regret_minimax,  color="#16a34a", ls="--", lw=1.6,
            label=f"p_g_worst = ${p_regret_minimax:,.0f}  (min regret peor caso)")
 # 📝 [D8] OJO: NO agregar una línea vertical para el mejor caso. Es cota, no criterio.
-ax.set(title="2 · Regret por precio: esperado dentro del marco mejor–peor caso",
+ax.set(title="3 · Regret por precio: esperado dentro del marco mejor–peor caso",
        xlabel="Precio (CLP)", ylabel="Regret (CLP)", ylim=(0, None))
 ax.legend(fontsize=8.5, loc="upper right", framealpha=0.92)
 ax.grid(ls="--", lw=0.4, alpha=0.4)
 ax.xaxis.set_major_formatter(clp); ax.yaxis.set_major_formatter(clp)
-fig2.tight_layout()
+fig3.tight_layout()
 
-# ── GRÁFICO 3 · Histogramas: efecto de la AVERSIÓN A LA PÉRDIDA ──────────────
-# 📝 FIX 3 — eje principal de comparación = β SIMÉTRICO (λ=1) vs ASIMÉTRICO (λ=2.25),
+# ── GRÁFICO 4 · Histogramas: efecto de la AVERSIÓN A LA PÉRDIDA ──────────────
+# 📝 FIX 4 — eje principal de comparación = β SIMÉTRICO (λ=1) vs ASIMÉTRICO (λ=2.25),
 #            que es lo que pidió el profe en la reunión del 11-jun. Antes el
 #            histograma comparaba p_g* vs p_g_worst (otra cosa).
 #
@@ -260,7 +279,7 @@ m_asim = m                                               # β asimétrico (λ=2.
 #   subir el precio hasta el tope. La aversión a la pérdida (λ=2.25) es lo que
 #   DISCIPLINA el precio y crea un óptimo INTERIOR. → la asimetría no es un
 #   detalle: es lo que hace que el problema de pricing tenga solución interior.
-print(f"\n── Gráfico 3 · efecto de β (aversión a la pérdida) ──")
+print(f"\n── Gráfico 4 · efecto de β (aversión a la pérdida) ──")
 print(f"   p_g* con λ=1   (simétrico) = ${m_sim['p_regret_esperado']:,.0f}   "
       f"(solución de ESQUINA: pega en el tope de la grilla)")
 print(f"   p_g* con λ=2.25 (asimétr.) = ${m_asim['p_regret_esperado']:,.0f}   "
@@ -278,11 +297,11 @@ j_corte = int(np.argmin(m_asim["regret_esperado"]))
 dem_sim,  dem_asim  = m_sim["demanda"][:, j_corte],  m_asim["demanda"][:, j_corte]
 prof_sim, prof_asim = m_sim["profit"][:,  j_corte],  m_asim["profit"][:,  j_corte]
 
-fig3, (axD, axP) = plt.subplots(1, 2, figsize=(14, 5.5))
+fig4, (axD, axP) = plt.subplots(1, 2, figsize=(14, 5.5))
 
 axD.hist(dem_sim,  bins=40, alpha=0.55, color="#94a3b8", label="β simétrico  (λ=1)")
 axD.hist(dem_asim, bins=40, alpha=0.55, color="#6366f1", label="β asimétrico (λ=2.25)")
-axD.set(title=f"3 · DEMANDA al cobrar p_g* = ${p_corte:,.0f}\n(β simétrico vs asimétrico — efecto de la aversión a la pérdida)",
+axD.set(title=f"4. DEMANDA al cobrar p_g* = ${p_corte:,.0f}\n(β simétrico vs asimétrico — efecto de la aversión a la pérdida)",
         xlabel="Demanda (unidades)", ylabel="N° de escenarios")
 axD.legend(fontsize=9); axD.grid(ls="--", lw=0.4, alpha=0.4)
 
@@ -292,7 +311,7 @@ axP.set(title=f"PROFIT al cobrar p_g* = ${p_corte:,.0f}\n(β simétrico vs asim�
         xlabel="Profit (CLP)", ylabel="N° de escenarios")
 axP.legend(fontsize=9); axP.grid(ls="--", lw=0.4, alpha=0.4)
 axP.xaxis.set_major_formatter(clp)
-fig3.tight_layout()
+fig4.tight_layout()
 
 # ── Estadísticos del corte (para el informe) ────────────────────────────────
 def resumen(nombre, x, en_clp=False):
