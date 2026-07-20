@@ -325,5 +325,32 @@ resumen("Demanda  β asimétrico (λ=2.25)", dem_asim)
 resumen("Profit   β simétrico (λ=1)",    prof_sim,  en_clp=True)
 resumen("Profit   β asimétrico (λ=2.25)", prof_asim, en_clp=True)
 
+p = np.linspace(P_MIN, P_MAX, 1000)
+ 
+fig, ax = plt.subplots(figsize=(10, 6))
+ 
+# Baseline simétrico (λ = 1): sin quiebre, referencia visual
+ax.plot(p, valor_kahneman(p, lam=1.0), lw=1.6, ls=":", color="#94a3b8",
+        label="caso simétrico  λ = 1   (v(p) = r − p, sin quiebre)")
+ 
+# Función asimétrica (λ = 2.25 del modelo)
+ax.plot(p, valor_kahneman(p, lam=lam), lw=2.8, color="#6366f1",
+        label=f"aversión a la pérdida  λ = {lam}")
+ 
+ax.axvline(r_ref, color="#a78bfa", ls="--", lw=1.5,
+           label=f"precio de referencia  r = ${r_ref:,.0f}")
+ax.axhline(0, color="black", lw=0.8, alpha=0.5)
+ 
+ax.set(title="Utilidad transaccional  v(p) = [r − p]⁺ − λ·[p − r]⁺",
+       xlabel="Precio (CLP)", ylabel="Valor percibido  v(p)")
+ax.legend(fontsize=10, loc="upper right", framealpha=0.92)
+ax.grid(ls="--", lw=0.4, alpha=0.4)
+ax.xaxis.set_major_formatter(clp)
+fig.tight_layout()
+ 
+fig.savefig("figura_4_1_valor_kahneman.png", dpi=200)
+print(f"OK — figura generada con λ={lam}, r=${r_ref:,.0f}, rango [{P_MIN:,}–{P_MAX:,}]")
+plt.show()
+
 # Muestra los tres gráficos en pantalla.
 plt.show()
