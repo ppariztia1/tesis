@@ -100,7 +100,7 @@ costo  = 3_000                     # costo unitario (CLP, fijo y conocido)
 #         Con 50 puntos el paso era ~$306 y los óptimos quedaban "pegados" a la grilla
 #         (precisión falsa al reportar "$13.265"). Con 500 el paso baja a ~$30.
 #         REPORTAR en la tesis: N_PRECIOS y el paso resultante.
-P_MIN, P_MAX, N_PRECIOS = 5_000, 20_000, 500
+P_MIN, P_MAX, N_PRECIOS = 5_000, 18_000, 500
 
 # --- Simulación ---
 N_ESCENARIOS = 1_000
