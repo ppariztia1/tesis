@@ -71,7 +71,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Formato de pesos chilenos para los ejes (se reutiliza en todos los gráficos)
+# Formato CLP
 clp = plt.FuncFormatter(lambda x, _: f"${x:,.0f}")
 
 
@@ -79,54 +79,50 @@ clp = plt.FuncFormatter(lambda x, _: f"${x:,.0f}")
 # 1. PARÁMETROS DEL MODELO
 # ═══════════════════════════════════════════════════════════════════════════
 
-# --- Demanda: nivel base (α) ---
+# Demanda: nivel base (α)
 demanda_base        = 200      # α̂  : demanda esperada (estimación puntual)
 demanda_base_sigma  = 20       # σ_α: incertidumbre sobre el nivel
 
-# --- Demanda: sensibilidad al precio (α_p) ---
+# Demanda: sensibilidad al precio (α_p)
 sensib_precio       = 0.008    # α̂_p : cuánto reacciona la demanda al valor percibido
 sensib_precio_sigma = 0.003    # σ_αp: incertidumbre sobre la pendiente
-                               # 📝 [D9] si esto fuera 0, p_g_worst = p_g*. La separación
+                               # [D9] si esto fuera 0, p_g_worst = p_g*. La separación
                                #         del minimax depende de esta incertidumbre.
 
-# --- Aversión a la pérdida (Kahneman-Tversky) ---
+# Aversión a la pérdida
 lam   = 2.25       # 📝 [D10] λ empírico: las pérdidas pesan 2.25× más que las ganancias. NO se estima.
-r_ref = 12_000     # r : precio de referencia del cliente (ancla de la asimetría)
+r_ref = 12_000     # r : referencia del cliente (ancla de la asimetría)
 
-# --- Costo y grilla de precios ---
-costo  = 3_000                     # costo unitario (CLP, fijo y conocido)
+# Costo y grilla de precios
+costo  = 3_000
 
-# 📝 [D2] FIX 1 — resolución de grilla: subimos de 50 → 500 puntos.
-#         Con 50 puntos el paso era ~$306 y los óptimos quedaban "pegados" a la grilla
-#         (precisión falsa al reportar "$13.265"). Con 500 el paso baja a ~$30.
-#         REPORTAR en la tesis: N_PRECIOS y el paso resultante.
-P_MIN, P_MAX, N_PRECIOS = 5_000, 18_000, 500
+# [D2] Resolución de grilla: subimos de 50 → 500 puntos.
+#      REPORTAR en el doc: N_PRECIOS y el paso resultante.
+P_MIN, P_MAX, N_PRECIOS = 5_000, 20_000, 500
 
-# --- Simulación ---
+# Simulación
 N_ESCENARIOS = 1_000
-SEED         = 42                  # 📝 [D3] semilla fija → reproducibilidad (reportarla)
+SEED = 42               # [D3] semilla fija → reproducibilidad (reportarla)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. GRILLA DE PRECIOS  (los precios candidatos entre los que elegimos)
+# 2. GRILLA DE PRECIOS
 # ═══════════════════════════════════════════════════════════════════════════
-precios = np.linspace(P_MIN, P_MAX, N_PRECIOS)          # shape (N_PRECIOS,)
+precios = np.linspace(P_MIN, P_MAX, N_PRECIOS)
 paso_grilla = precios[1] - precios[0]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. ESCENARIOS DE INCERTIDUMBRE
 #    Cada escenario es un par (α_k, α_p,k) muestreado de sus distribuciones.
-#    Los muestreamos UNA sola vez y los reutilizamos en todas las corridas
-#    (esto es clave para el Gráfico 3: comparar λ simétrico vs asimétrico sobre
-#     LOS MISMOS escenarios, así el único cambio es la aversión a la pérdida).
+#    Los muestreamos UNA sola vez y los dejo congelados para las demás corridas.
 # ═══════════════════════════════════════════════════════════════════════════
 rng = np.random.default_rng(SEED)
 
 alpha    = rng.normal(demanda_base,  demanda_base_sigma,  N_ESCENARIOS)   # nivel por escenario
 alpha_p  = rng.normal(sensib_precio, sensib_precio_sigma, N_ESCENARIOS)   # pendiente por escenario
-# 📝 [D5] este clip evita pendiente negativa, pero crea el escenario casi-plano
-#         que domina el minimax (ver [D4]). Documentar como limitación.
+# [D5] Este clip evita pendiente negativa, pero crea el escenario casi-plano
+#      que domina el minimax. Documentar como limitación.
 alpha_p  = np.clip(alpha_p, 1e-6, None)
 
 
@@ -134,45 +130,41 @@ alpha_p  = np.clip(alpha_p, 1e-6, None)
 # 4. UTILIDAD TRANSACCIONAL DE KAHNEMAN
 #    v(p) = [r − p]⁺  −  λ·[p − r]⁺
 #      · si p < r → "ganancia" percibida, pendiente +1
-#      · si p > r → "pérdida"  percibida, pendiente −λ  (penalización amplificada)
-#    Nota: con λ = 1 la función es simétrica → v(p) = (r − p), sin quiebre.
-#          Eso es justo el caso "sin aversión a la pérdida" que usamos de
-#          baseline en el Gráfico 3.
+#      · si p > r → "pérdida"  percibida, pendiente −λ
 # ═══════════════════════════════════════════════════════════════════════════
 def valor_kahneman(p, r=r_ref, lam=lam):
-    ganancia = np.maximum(0, r - p)        # cuánto "gana" el cliente si el precio está bajo r
-    perdida  = np.maximum(0, p - r)        # cuánto "pierde" si está sobre r
+    ganancia = np.maximum(0, r - p)        # ganancia percibida por el cliente cuando el precio está bajo r
+    perdida  = np.maximum(0, p - r)        # perdida percibida si el precio está sobre r
     return ganancia - lam * perdida
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5-7. PIPELINE DEL MODELO  (demanda → profit → regret → criterios)
-#      Lo encapsulamos en una función para poder correrlo con distintos λ
-#      reutilizando los MISMOS escenarios muestreados.
 # ═══════════════════════════════════════════════════════════════════════════
 def evaluar_modelo(lam_eval, alpha, alpha_p, precios):
     """Corre todo el modelo para un λ dado y devuelve un diccionario con
     demanda, profit, regret, las curvas resumidas y los precios óptimos."""
-    valor   = valor_kahneman(precios, lam=lam_eval)                       # (N_PRECIOS,)
+
+    valor   = valor_kahneman(precios, lam=lam_eval)
 
     # 5. DEMANDA POR ESCENARIO  D_k(p) = max(0, α_k + α_p,k · v(p))
     demanda = np.maximum(0, alpha[:, None] + alpha_p[:, None] * valor[None, :])
 
     # 6. PROFIT POR ESCENARIO   Π_k(p) = D_k(p) · (p − costo)
-    profit  = demanda * (precios[None, :] - costo)                        # (N_ESC × N_PRECIOS)
+    profit  = demanda * (precios[None, :] - costo)
 
     # 7. REGRET Y CRITERIOS
-    # 📝 [D1] ORÁCULO: mejor profit por escenario, en retrospectiva. Proxy del
+    # [D1] ORÁCULO: mejor profit por escenario, en retrospectiva. Proxy del
     #         "caso real" porque los datos son simulados. Documentar como supuesto.
-    profit_oraculo = profit.max(axis=1)                                   # (N_ESC,)
+    profit_oraculo = profit.max(axis=1)
 
     # Regret[k, j] = lo que dejamos de ganar en el escenario k al cobrar el precio j.
-    regret = profit_oraculo[:, None] - profit                             # (N_ESC × N_PRECIOS), ≥ 0
+    regret = profit_oraculo[:, None] - profit
 
-    # Las TRES curvas salen de la MISMA matriz regret (mismo oráculo, misma grilla):
+    # Las tres curvas del gráfico 3 salen de la MISMA matriz regret:
     regret_esperado = regret.mean(axis=0)     # E[R] por precio
     regret_peor     = regret.max(axis=0)      # peor caso por precio (minimax)
-    regret_mejor    = regret.min(axis=0)      # 📝 [D8] mejor caso: SOLO cota inferior
+    regret_mejor    = regret.min(axis=0)      # [D8] mejor caso: SOLO cota inferior
 
     # Criterios de decisión (precios):
     p_profit_esperado = precios[np.argmax(profit.mean(axis=0))]   # A: max E[Π]
@@ -186,8 +178,7 @@ def evaluar_modelo(lam_eval, alpha, alpha_p, precios):
                 p_regret_esperado=p_regret_esperado,
                 p_regret_minimax=p_regret_minimax)
 
-
-# ── Corremos el MODELO PRINCIPAL (con aversión a la pérdida, λ = 2.25) ───────
+# Corremos el MODELO PRINCIPAL (con aversión a la pérdida, λ = 2.25)
 m = evaluar_modelo(lam, alpha, alpha_p, precios)
 
 demanda, profit, regret = m["demanda"], m["profit"], m["regret"]
@@ -196,8 +187,8 @@ p_profit_esperado = m["p_profit_esperado"]
 p_regret_esperado = m["p_regret_esperado"]
 p_regret_minimax  = m["p_regret_minimax"]
 
-# 📝 [D6] Identidad clave: A y B coinciden SIEMPRE (el oráculo cancela como
-#         constante en el regret esperado → minimizar E[R] ≡ maximizar E[Π]).
+# [D6] Identidad clave: A y B coinciden SIEMPRE (el oráculo cancela como
+#         constante en el regret esperado → minimizar E[R] = maximizar E[Π]).
 print(f"Grilla: {N_PRECIOS} precios, paso = ${paso_grilla:,.0f}  (semilla = {SEED})")
 print(f"Criterio A — max profit esperado   : ${p_profit_esperado:,.0f}")
 print(f"Criterio B — min regret esperado   : ${p_regret_esperado:,.0f}   (= A por construcción)")
@@ -208,7 +199,7 @@ print(f"Criterio C — min regret peor caso  : ${p_regret_minimax:,.0f}")
 # 8. GRÁFICOS
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── GRÁFICO 1 · Curvas de demanda ───────────────────────────────────────────
+# ── GRÁFICO 1: Curvas de demanda ───────────────────────────────────────────
 fig1, ax = plt.subplots(figsize=(10, 6))
 for k in range(50):                                    # mostramos 50 de los 1.000 escenarios
     ax.plot(precios, demanda[k], lw=0.8, alpha=0.4, color="#60a5fa")
@@ -225,10 +216,9 @@ ax.set(title="1 · Demanda con aversión a la pérdida  (50 de 1.000 escenarios)
 ax.legend(); ax.grid(ls="--", lw=0.4, alpha=0.4); ax.xaxis.set_major_formatter(clp)
 fig1.tight_layout()
 
-# ── GRÁFICO 2 · Profit por precio ───────────────────────────────────────────
-#   Mismo espíritu que el Gráfico 1, pero del profit. Sirve para VER la identidad
+# ── GRÁFICO 2: Profit por precio ───────────────────────────────────────────
+#   Gráfico 1 pero de profit.
 #   [D6]: la vertical en p_g* cae exactamente sobre el máximo del profit esperado
-#   (promedio de escenarios) → minimizar regret esperado ≡ maximizar profit esperado.
 fig2, ax = plt.subplots(figsize=(10, 6))
 for k in range(50):                                    # 50 de los 1.000 escenarios
     ax.plot(precios, profit[k], lw=0.8, alpha=0.4, color="#fca5a5")
@@ -244,7 +234,7 @@ ax.legend(fontsize=9); ax.grid(ls="--", lw=0.4, alpha=0.4)
 ax.xaxis.set_major_formatter(clp); ax.yaxis.set_major_formatter(clp)
 fig2.tight_layout()
 
-# ── GRÁFICO 3 · Regret por precio (con marco de riesgo mejor–peor caso) ──────
+# ── GRÁFICO 3: Regret por precio (con marco de riesgo mejor–peor caso) ──────
 fig3, ax = plt.subplots(figsize=(10, 5.5))
 ax.fill_between(precios, regret_mejor, regret_peor, color="#fb923c", alpha=0.13,
                 label="rango mejor–peor caso (marco de riesgo)")
@@ -263,34 +253,24 @@ ax.grid(ls="--", lw=0.4, alpha=0.4)
 ax.xaxis.set_major_formatter(clp); ax.yaxis.set_major_formatter(clp)
 fig3.tight_layout()
 
-# ── GRÁFICO 4 · Histogramas: efecto de la AVERSIÓN A LA PÉRDIDA ──────────────
-# 📝 FIX 4 — eje principal de comparación = β SIMÉTRICO (λ=1) vs ASIMÉTRICO (λ=2.25),
-#            que es lo que pidió el profe en la reunión del 11-jun. Antes el
-#            histograma comparaba p_g* vs p_g_worst (otra cosa).
+# ── GRÁFICO 4: Histogramas: efecto de la AVERSIÓN A LA PÉRDIDA ──────────────
+#    Eje principal de comparación = β SIMÉTRICO (λ=1) vs ASIMÉTRICO (λ=2.25),
+#    que es lo que pidió el profe en la reunión del 11-jun. 
 #
-#   Corremos el modelo con λ=1 (baseline simétrico, sin aversión) y con λ=2.25
-#   (asimétrico) sobre LOS MISMOS escenarios, así el único cambio es λ.
-m_sim  = evaluar_modelo(1.0, alpha, alpha_p, precios)    # β simétrico (sin aversión)
-m_asim = m                                               # β asimétrico (λ=2.25), ya calculado
+#   Corremos el modelo con λ=1 y con λ=2.25 sobre LOS MISMOS escenarios, el único cambio es λ.
+m_sim  = evaluar_modelo(1.0, alpha, alpha_p, precios)    # β simétrico
+m_asim = m                                               # β asimétrico
 
-# 📝 HALLAZGO A DOCUMENTAR (importante, le va a gustar al profe):
-#   Sin aversión a la pérdida (λ=1) el óptimo se va al BORDE de la grilla
-#   (solución de esquina): no hay castigo por cobrar sobre r, así que conviene
-#   subir el precio hasta el tope. La aversión a la pérdida (λ=2.25) es lo que
-#   DISCIPLINA el precio y crea un óptimo INTERIOR. → la asimetría no es un
-#   detalle: es lo que hace que el problema de pricing tenga solución interior.
+#   HALLAZGO A DOCUMENTAR:
+#   Sin aversión a la pérdida (λ=1) el óptimo se va al BORDE de la grilla: no hay castigo por cobrar
+#   sobre r, así que conviene subir el precio hasta el tope. La aversión a la pérdida (λ=2.25) es lo que
+#   DISCIPLINA el precio y crea un óptimo INTERIOR.
 print(f"\n── Gráfico 4 · efecto de β (aversión a la pérdida) ──")
 print(f"   p_g* con λ=1   (simétrico) = ${m_sim['p_regret_esperado']:,.0f}   "
       f"(solución de ESQUINA: pega en el tope de la grilla)")
 print(f"   p_g* con λ=2.25 (asimétr.) = ${m_asim['p_regret_esperado']:,.0f}   "
       f"(óptimo INTERIOR, creado por la aversión a la pérdida)")
 
-# Para AISLAR el efecto de λ sobre los RESULTADOS (sin mezclarlo con el salto de
-# precio ni con la solución de esquina), comparamos demanda y profit EN EL MISMO
-# PRECIO: el que la firma realmente cobraría (p_g* del modelo asimétrico real).
-# Así lo único que cambia entre las dos barras es la aversión a la pérdida.
-# 📝 ALTERNATIVA A DECIDIR AL REDACTAR: mostrar "cada modelo en su propio óptimo"
-#    (j por separado) — pero ahí entra la solución de esquina de λ=1; justificarlo.
 p_corte = m_asim["p_regret_esperado"]
 j_corte = int(np.argmin(m_asim["regret_esperado"]))
 
