@@ -1,27 +1,32 @@
 # ══════════════════════════════════════════════════════════════════════════════
-#  TABLAS 5.1 y 5.3 DE LA MEMORIA
+#  MATERIAL COMPLEMENTARIO DE LA MEMORIA
+#  Tabla 5.1 · Tabla 5.3 · Ilustración 4.1
 #  ────────────────────────────────────────────────────────────────────────────
 #  Dos modos de uso (el bloque detecta solo en cuál está):
-#   (a) PEGADO AL FINAL de modelo_final.py  → reutiliza las variables ya
-#       calculadas (profit, precios, alpha, alpha_p, ...). No re-muestrea nada.
-#   (b) Como archivo aparte (tablas_memoria.py) junto a modelo_final.py
-#       → importa esas mismas variables del modelo congelado.
+#   (a) PEGADO AL FINAL de modelo_final.py → reutiliza las variables ya
+#       calculadas. No re-muestrea nada. Pegar ANTES del plt.show() final del
+#       modelo; si va después, ese show() bloquea la ejecución de este bloque.
+#   (b) Como archivo aparte (tablas_memoria.py) junto a modelo_final.py.
 #  En ambos casos los resultados provienen de los MISMOS 1.000 escenarios
-#  (semilla 42) del resto de la memoria.
+#  (semilla 42) del resto de la memoria. modelo_final.py no se modifica.
 # ══════════════════════════════════════════════════════════════════════════════
 import numpy as np
+import matplotlib.pyplot as plt
 
-try:                                   # modo (a): pegado al final del modelo
-    profit                             # ¿existen ya las variables?
-except NameError:                      # modo (b): archivo aparte
-    import matplotlib.pyplot as plt
-    from modelo_final import (profit, precios, alpha, alpha_p,
-                              lam, r_ref, costo, P_MIN)
-    plt.close("all")                   # cierra las figuras que crea el import
+_STANDALONE = False
+try:                                   # modo (a): las variables ya existen
+    profit
+except NameError:                      # modo (b): se importan del modelo congelado
+    _STANDALONE = True
+    from modelo_final import (profit, precios, alpha, alpha_p, valor_kahneman,
+                              lam, r_ref, costo, P_MIN, P_MAX, clp)
+    plt.close("all")                   # descarta las figuras que crea el import
 
-# ── TABLA 5.1 · Dispersión del profit entre escenarios según el precio ───────
-#    Para cada precio de referencia de la tabla: desviación estándar del profit
-#    entre los 1.000 escenarios, y magnitud del valor percibido |v(p)|.
+# ══════════════════════════════════════════════════════════════════════════════
+#  TABLA 5.1 · Dispersión del profit entre escenarios según el precio
+#  σ del profit entre los 1.000 escenarios, y magnitud del valor percibido.
+#  Sustenta el argumento de que el abanico se abre más rápido sobre r.
+# ══════════════════════════════════════════════════════════════════════════════
 print("\n── Tabla 5.1 · Dispersión del profit entre escenarios ──")
 print(f"{'Precio':>14} | {'σ del profit':>14} | {'|v(p)|':>10}")
 print("-" * 46)
@@ -34,10 +39,11 @@ for p_obj in [6_000, 9_000, 12_000, 15_000, 18_000]:
 print("Nota: σ calculada sobre los 1.000 escenarios en el punto de grilla")
 print("más cercano a cada precio; |v(p)| según la ecuación (4.1).")
 
-# ── TABLA 5.3 · Sensibilidad de los criterios al límite superior de la grilla ─
-#    Para cada P_MAX se reconstruye la grilla manteniendo el paso en ~$30
-#    (N crece con el rango), y se recalculan demanda, profit, oráculo y regret
-#    sobre los mismos escenarios. modelo_final.py no se modifica: esto solo lee.
+# ══════════════════════════════════════════════════════════════════════════════
+#  TABLA 5.3 · Sensibilidad de los criterios al techo de la grilla
+#  Se reconstruye la grilla para cada techo manteniendo el paso en ~$30, porque
+#  con N fijo el paso cambiaría y contaminaría la comparación. Solo lectura.
+# ══════════════════════════════════════════════════════════════════════════════
 PASO_53 = 30.06                                          # paso oficial: 15.000/499
 
 def _criterios(p_max):
@@ -49,7 +55,7 @@ def _criterios(p_max):
     reg = pi.max(axis=1, keepdims=True) - pi             # oráculo por escenario
     return p[int(np.argmin(reg.mean(axis=0)))], p[int(np.argmin(reg.max(axis=0)))]
 
-print("\n── Tabla 5.3 · Sensibilidad al límite superior de la grilla ──")
+print("\n── Tabla 5.3 · Sensibilidad al techo de la grilla ──")
 print(f"{'P_MAX':>10} | {'criterio esperado':>18} | {'criterio peor caso':>18}")
 print("-" * 54)
 for p_max in [18_000, 20_000, 22_000, 25_000, 30_000]:
@@ -57,3 +63,37 @@ for p_max in [18_000, 20_000, 22_000, 25_000, 30_000]:
     print(f"${p_max:>9,} | ${pe:>17,.0f} | ${pm:>17,.0f}")
 print("Nota: paso de grilla mantenido en ~$30 (N crece con el rango).")
 print("Los precios se reportan con la precisión que el paso permite [D2].")
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ILUSTRACIÓN 4.1 · Utilidad transaccional v(p) = [r − p]⁺ − λ·[p − r]⁺
+#  Se incluye el caso λ=1 como referencia visual: ambas curvas coinciden bajo r
+#  y solo se separan sobre r, lo que hace visible que toda la asimetría vive en
+#  la región de pérdida percibida.
+# ══════════════════════════════════════════════════════════════════════════════
+_p = np.linspace(P_MIN, P_MAX, 1000)
+
+fig_i41, ax = plt.subplots(figsize=(10, 6))
+
+ax.plot(_p, valor_kahneman(_p, lam=1.0), lw=1.6, ls=":", color="#94a3b8",
+        label="caso simétrico  λ = 1   (v(p) = r − p, sin quiebre)")
+ax.plot(_p, valor_kahneman(_p, lam=lam), lw=2.8, color="#6366f1",
+        label=f"aversión a la pérdida  λ = {lam}")
+ax.axvline(r_ref, color="#a78bfa", ls="--", lw=1.5,
+           label=f"precio de referencia  r = ${r_ref:,.0f}")
+ax.axhline(0, color="black", lw=0.8, alpha=0.5)
+
+ax.set(title="Utilidad transaccional  v(p) = [r − p]⁺ − λ·[p − r]⁺",
+       xlabel="Precio (CLP)", ylabel="Valor percibido  v(p)")
+ax.legend(fontsize=10, loc="upper right", framealpha=0.92)
+ax.grid(ls="--", lw=0.4, alpha=0.4)
+ax.xaxis.set_major_formatter(clp)
+fig_i41.tight_layout()
+
+fig_i41.savefig("ilustracion_4_1_utilidad_transaccional.png", dpi=200)
+fig_i41.savefig("ilustracion_4_1_utilidad_transaccional.pdf")   # vectorial para el documento
+print(f"\n── Ilustración 4.1 · generada con λ={lam}, r=${r_ref:,.0f}, "
+      f"rango [${P_MIN:,} – ${P_MAX:,}] ──")
+print("Archivos: ilustracion_4_1_utilidad_transaccional.png / .pdf")
+
+if _STANDALONE:      # en modo (a) el show() lo hace modelo_final.py
+    plt.show()
