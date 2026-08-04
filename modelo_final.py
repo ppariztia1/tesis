@@ -20,9 +20,9 @@
         · regret PEOR CASO  → precio robusto "minimax"       (p_g_worst)
 ═══════════════════════════════════════════════════════════════════════════
 
-╔═══════════════════════════════════════════════════════════════════════════╗
-║  📝  PARA DOCUMENTAR EN LA TESIS  (checklist — no se me puede pasar)         ║
-╠═══════════════════════════════════════════════════════════════════════════╣
+╔═════════════════════════════════════════════════════════════════════════════╗
+║     PARA DOCUMENTAR EN LA TESIS  (checklist — no se me puede pasar)         ║
+╠═════════════════════════════════════════════════════════════════════════════╣
 ║  [D1] SUPUESTO DEL ORÁCULO. El oráculo es el máximo profit por escenario,   ║
 ║       visto en retrospectiva (clairvoyant benchmark). Como trabajo con      ║
 ║       datos SIMULADOS, no existe un "caso real" observable: el oráculo usa  ║
@@ -65,7 +65,7 @@
 ║       PENDIENTE (sensib_precio_sigma > 0). Con σ_αp = 0 ambos coinciden.    ║
 ║                                                                             ║
 ║  [D10] λ = 2.25 es valor EMPÍRICO de Kahneman-Tversky; NO se estima.        ║
-╚═══════════════════════════════════════════════════════════════════════════╝
+╚═════════════════════════════════════════════════════════════════════════════╝
 """
 
 import numpy as np
