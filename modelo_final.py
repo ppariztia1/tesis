@@ -74,7 +74,6 @@ import matplotlib.pyplot as plt
 # Formato CLP
 clp = plt.FuncFormatter(lambda x, _: f"${x:,.0f}")
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. PARÁMETROS DEL MODELO
 # ═══════════════════════════════════════════════════════════════════════════
@@ -104,13 +103,11 @@ P_MIN, P_MAX, N_PRECIOS = 5_000, 20_000, 500
 N_ESCENARIOS = 1_000
 SEED = 42            # [D3] semilla fija → reproducibilidad (reportarla)
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. GRILLA DE PRECIOS
 # ═══════════════════════════════════════════════════════════════════════════
 precios = np.linspace(P_MIN, P_MAX, N_PRECIOS)
 paso_grilla = precios[1] - precios[0]
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. ESCENARIOS DE INCERTIDUMBRE
@@ -123,7 +120,6 @@ alpha_p  = rng.normal(sensib_precio, sensib_precio_sigma, N_ESCENARIOS)
 #      que domina el minimax. Documentar como limitación.
 alpha_p  = np.clip(alpha_p, 1e-6, None)
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. UTILIDAD TRANSACCIONAL DE KAHNEMAN
 # ═══════════════════════════════════════════════════════════════════════════
@@ -132,14 +128,10 @@ def valor_kahneman(p, r=r_ref, lam=lam):
     perdida  = np.maximum(0, p - r)
     return ganancia - lam * perdida
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 5-7. PIPELINE DEL MODELO  (demanda → profit → regret → criterios)
 # ═══════════════════════════════════════════════════════════════════════════
 def evaluar_modelo(lam_eval, alpha, alpha_p, precios):
-    """Corre todo el modelo para un λ dado y devuelve un diccionario con
-    demanda, profit, regret, las curvas resumidas y los precios óptimos."""
-
     valor   = valor_kahneman(precios, lam=lam_eval)
 
     # 5. DEMANDA POR ESCENARIO  D_k(p) = max(0, α_k + α_p,k · v(p))
@@ -152,7 +144,6 @@ def evaluar_modelo(lam_eval, alpha, alpha_p, precios):
     # [D1] ORÁCULO: mejor profit por escenario, en retrospectiva. Proxy del
     #      "caso real" porque los datos son simulados. Documentar como supuesto.
     profit_oraculo = profit.max(axis=1)
-
     regret = profit_oraculo[:, None] - profit
 
     regret_esperado = regret.mean(axis=0)     # E[R] por precio
@@ -186,7 +177,6 @@ print(f"Grilla: {N_PRECIOS} precios, paso = ${paso_grilla:,.0f}  (semilla = {SEE
 print(f"Criterio A — max profit esperado   : ${p_profit_esperado:,.0f}")
 print(f"Criterio B — min regret esperado   : ${p_regret_esperado:,.0f}   (= A por construcción)")
 print(f"Criterio C — min regret peor caso  : ${p_regret_minimax:,.0f}")
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 8. GRÁFICOS
@@ -236,7 +226,7 @@ ax.axvline(p_regret_esperado, color="gold",    ls="--", lw=1.6,
            label=f"p_g* = ${p_regret_esperado:,.0f}  (min regret esperado)")
 ax.axvline(p_regret_minimax,  color="#16a34a", ls="--", lw=1.6,
            label=f"p_g_worst = ${p_regret_minimax:,.0f}  (min regret peor caso)")
-# 📝 [D8] OJO: NO agregar una línea vertical para el mejor caso. Es cota, no criterio.
+# [D8] OJO: NO agregar una línea vertical para el mejor caso. Es cota, no criterio.
 ax.set(title="3 · Regret por precio: esperado dentro del marco mejor–peor caso",
        xlabel="Precio (CLP)", ylabel="Regret (CLP)", ylim=(0, None))
 ax.legend(fontsize=8.5, loc="upper right", framealpha=0.92)
@@ -248,10 +238,6 @@ fig3.tight_layout()
 m_sim  = evaluar_modelo(1.0, alpha, alpha_p, precios)
 m_asim = m
 
-#   HALLAZGO A DOCUMENTAR:
-#   Sin aversión a la pérdida (λ=1) el óptimo se va al BORDE de la grilla: no hay castigo por cobrar
-#   sobre r, así que conviene subir el precio hasta el tope. La aversión a la pérdida (λ=2.25) es lo que
-#   DISCIPLINA el precio y crea un óptimo INTERIOR.
 print(f"\n── Gráfico 4 · efecto de β (aversión a la pérdida) ──")
 print(f"   p_g* con λ=1   (simétrico) = ${m_sim['p_regret_esperado']:,.0f}   "
       f"(solución de ESQUINA: pega en el tope de la grilla)")
